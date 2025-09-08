@@ -1,31 +1,58 @@
 const mongoose = require("mongoose");
 
-const messageSchema = new mongoose.Schema({
-    sender: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
-    },
-    content: {
-        type: String,
-        trim: true
-    },
-    chat: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Chat",
-    },
-    readBy: [
-        {
+const messageSchema = new mongoose.Schema(
+    {
+        sender: {
             type: mongoose.Schema.Types.ObjectId,
-            ref: "User"
-        }
-    ],
-    status: {
-        type: String,
-        enum: ["sent", "delivered", "read"],
-        default: "sent"
-    }
-},
+            ref: "User",
+        },
+        chat: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Chat",
+        },
+        type: {
+            type: String,
+            enum: ["text", "location", "contact", "poll"],
+            default: "text",
+        },
+        content: {
+            type: String,
+            trim: true,
+        },
+        location: {
+            latitude: Number,
+            longitude: Number,
+            link: String,
+        },
+        contact: {
+            name: String,
+            phoneNumber: String,
+            email: String,
+        },
+        poll: {
+            topic: String,
+            options: [String],
+            votes: [
+                {
+                    user: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+                    optionIndex: Number,
+                },
+            ],
+        },
+        readBy: [
+            {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: "User",
+            },
+        ],
+        status: {
+            type: String,
+            enum: ["sent", "delivered", "read"],
+            default: "sent",
+        },
+    },
     { timestamps: true }
-)
+);
+
 
 module.exports = mongoose.model("Message", messageSchema);

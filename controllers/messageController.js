@@ -8,18 +8,36 @@ const ErrorHandler = require("../utils/errorhandler");
 
 // 3️⃣ Send a message
 exports.sendMessage = catchAsyncErrors(async (req, res, next) => {
-    const { content, chatId } = req.body;
+    const { content, chatId, type, location, contact, poll } = req.body;
 
-    if (!content || !chatId) {
-        return next(new ErrorHandler("Invalid data passed into request", 400));
+    if (!chatId) {
+        return next(new ErrorHandler("ChatId is required", 400));
     }
 
     let newMessage = {
         sender: req.user._id,
-        content: content,
         chat: chatId,
-        status: "sent"
+        type: type || "text",
+        status: "sent",
     };
+
+    // Attach based on type
+    if (type === "text") {
+        if (!content) return next(new ErrorHandler("Content required for text message", 400));
+        newMessage.content = content;
+    }
+
+    if (type === "location" && location) {
+        newMessage.location = location;
+    }
+
+    if (type === "contact" && contact) {
+        newMessage.contact = contact;
+    }
+
+    if (type === "poll" && poll) {
+        newMessage.poll = poll;
+    }
 
     try {
         let message = await Message.create(newMessage);
@@ -31,14 +49,14 @@ exports.sendMessage = catchAsyncErrors(async (req, res, next) => {
             select: "name profileImage email",
         });
 
-        // update chat latestMessage
-        await Chat.findByIdAndUpdate(req.body.chatId, { latestMessage: message });
+        await Chat.findByIdAndUpdate(chatId, { latestMessage: message });
 
         res.status(200).json({ success: true, message });
     } catch (error) {
         next(new ErrorHandler(error.message, 500));
     }
 });
+
 
 // 4️⃣ Get all messages for a chat
 exports.allMessages = catchAsyncErrors(async (req, res, next) => {
