@@ -12,12 +12,17 @@ const messageSchema = new mongoose.Schema(
         },
         type: {
             type: String,
-            enum: ["text", "location", "contact", "poll"],
+            enum: ["text", "location", "contact", "poll", "media"],
             default: "text",
         },
         content: {
             type: String,
             trim: true,
+        },
+        media: {
+            url: String,        // Cloudinary URL
+            publicId: String,   // Cloudinary public_id (for deletion if needed)
+            format: String,     // image / video / audio / document
         },
         location: {
             latitude: Number,

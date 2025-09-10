@@ -3,7 +3,7 @@ const Chat = require("../models/chatModel");
 const User = require("../models/userModels");
 const catchAsyncErrors = require("../middleware/catchAsyncError");
 const ErrorHandler = require("../utils/errorhandler");
-
+const cloudinary = require("cloudinary");
 
 
 // 3️⃣ Send a message
@@ -21,7 +21,6 @@ exports.sendMessage = catchAsyncErrors(async (req, res, next) => {
         status: "sent",
     };
 
-    // Attach based on type
     if (type === "text") {
         if (!content) return next(new ErrorHandler("Content required for text message", 400));
         newMessage.content = content;
@@ -37,6 +36,22 @@ exports.sendMessage = catchAsyncErrors(async (req, res, next) => {
 
     if (type === "poll" && poll) {
         newMessage.poll = poll;
+    }
+
+    if (type === "media" && req.files?.file) {
+        const file = req.files.file;
+
+        // Upload to cloudinary
+        const upload = await cloudinary.v2.uploader.upload(file.tempFilePath, {
+            folder: "whisp/chat_media",
+            resource_type: "auto", // handles image, video, pdf, etc.
+        });
+
+        newMessage.media = {
+            url: upload.secure_url,
+            publicId: upload.public_id,
+            format: upload.resource_type, // "image" / "video" / "raw"
+        };
     }
 
     try {
@@ -56,6 +71,8 @@ exports.sendMessage = catchAsyncErrors(async (req, res, next) => {
         next(new ErrorHandler(error.message, 500));
     }
 });
+
+
 
 
 // 4️⃣ Get all messages for a chat
