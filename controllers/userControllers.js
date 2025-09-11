@@ -287,3 +287,19 @@ exports.syncContacts = catchAsyncErrors(async (req, res, next) => {
     res.status(500).json({ success: false, message: "Server error" });
   }
 });
+
+
+// save PushToken
+
+exports.savePushToken = catchAsyncErrors(async (req, res, next) => {
+  const { token } = req.body;
+  if (!token) return next(new ErrorHandler("Token required", 400));
+
+  const user = await User.findByIdAndUpdate(
+    req.user._id,
+    { expoPushToken: token },
+    { new: true }
+  );
+
+  res.status(200).json({ success: true, token: user.expoPushToken });
+});

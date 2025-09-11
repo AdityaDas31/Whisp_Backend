@@ -66,6 +66,34 @@ exports.sendMessage = catchAsyncErrors(async (req, res, next) => {
 
         await Chat.findByIdAndUpdate(chatId, { latestMessage: message });
 
+        // Send push notification
+        try {
+            const chat = await Chat.findById(chatId).populate("users", "expoPushToken _id");
+            const recipients = chat.users.filter(u => u._id.toString() !== req.user._id.toString());
+
+            for (let recipient of recipients) {
+                if (recipient.expoPushToken) {
+                    await fetch("https://exp.host/--/api/v2/push/send", {
+                        method: "POST",
+                        headers: {
+                            "Accept": "application/json",
+                            "Accept-encoding": "gzip, deflate",
+                            "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify({
+                            to: recipient.expoPushToken,
+                            sound: "default",
+                            title: `${message.sender.name}`,
+                            body: message.type === "text" ? message.content : "📎 Sent you a file",
+                            data: { chatId: chatId },
+                        }),
+                    });
+                }
+            }
+        } catch (err) {
+            console.error("❌ Push notification error:", err.message);
+        }
+
         res.status(200).json({ success: true, message });
     } catch (error) {
         next(new ErrorHandler(error.message, 500));

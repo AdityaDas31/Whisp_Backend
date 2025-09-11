@@ -55,7 +55,7 @@ const userSchema = new mongoose.Schema({
             ref: "User"
         }
     ],
-    deviceTokens: [String],
+    expoPushToken: { type: String },
     createdAt: {
         type: Date,
         default: Date.now,
@@ -83,9 +83,7 @@ userSchema.methods.comparePassword = async function (enteredPassword) {
 
 // JWT token
 userSchema.methods.getJWTToken = function () {
-    return jwt.sign({ id: this._id }, process.env.JWT_SECRET, {
-        expiresIn: process.env.JWT_EXPIRE,
-    })
+    return jwt.sign({ id: this._id }, process.env.JWT_SECRET)
 };
 
 module.exports = mongoose.model("User", userSchema);
