@@ -116,27 +116,8 @@ exports.allMessages = catchAsyncErrors(async (req, res, next) => {
     }
 });
 
-// 5️⃣ Mark message(s) as read
 
-exports.markAsRead = catchAsyncErrors(async (req, res, next) => {
-    const { chatId } = req.body;
 
-    if (!chatId) {
-        return next(new ErrorHandler("chatId is required", 400));
-    }
-
-    try {
-        // Mark all messages in this chat as read by the current user
-        const updated = await Message.updateMany(
-            { chat: chatId, readBy: { $ne: req.user._id } }, // only unread for this user
-            { $addToSet: { readBy: req.user._id } } // push if not exists
-        );
-
-        res.status(200).json({ success: true, updatedCount: updated.modifiedCount });
-    } catch (error) {
-        next(new ErrorHandler(error.message, 500));
-    }
-});
 
 exports.deleteMessage = catchAsyncErrors(async (req, res, next) => {
     const message = await Message.findById(req.params.id);

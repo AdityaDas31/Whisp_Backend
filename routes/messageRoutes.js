@@ -12,8 +12,6 @@ router.delete("/:id", isAuthenticatedUser, deleteMessage);
 
 router.put("/:id", isAuthenticatedUser, updateMessage);
 
-router.put("/message/markAsRead", isAuthenticatedUser, markAsRead)
-
 
 
 

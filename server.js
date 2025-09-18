@@ -4,8 +4,8 @@ const connectDatabase = require("./config/database");
 const cloudinary = require("cloudinary");
 const http = require("http");
 const { Server } = require("socket.io");
-const isAuthenticatedUserSocket = require("./middleware/authSocket")
-const Message = require("./models/messageModel")
+const User = require("./models/userModels");
+const Chat = require("./models/chatModel");
 
 
 // Config
@@ -31,6 +31,8 @@ cloudinary.config({
 // Create HTTP server (important for socket.io)
 const httpServer = http.createServer(app);
 
+
+
 // Attach Socket.IO
 const io = new Server(httpServer, {
     cors: {
@@ -39,6 +41,7 @@ const io = new Server(httpServer, {
     }
 });
 
+let onlineUsers = {};
 // --- SOCKET.IO EVENTS ---
 io.on("connection", (socket) => {
     console.log("⚡ New client connected:", socket.id);
@@ -54,35 +57,81 @@ io.on("connection", (socket) => {
         console.log(`👋 ${socket.id} left room: ${chatId}`);
     });
 
-    // Listen for messages
-    socket.on("sendMessage", (message) => {
-        // io.to(message.chatId).emit("receiveMessage", message);
-        socket.to(message.chatId).emit("receiveMessage", message);
+    socket.on("registerUser", async (userId) => {
+        if (!userId) return;
+
+        if (!onlineUsers[userId]) {
+            onlineUsers[userId] = new Set();
+        }
+        onlineUsers[userId].add(socket.id);
+
+        await User.findByIdAndUpdate(userId, { onlineStatus: true });
+
+        io.emit("userOnline", { userId, online: true });
+        console.log("✅ User registered online:", userId, onlineUsers[userId]);
     });
 
-    // When recipient marks as read
-    socket.on("messagesRead", async ({ chatId, userId }) => {
+    // Listen for messages
+    // socket.on("sendMessage", (message) => {
+    //     // io.to(message.chatId).emit("receiveMessage", message);
+    //     socket.to(message.chatId).emit("receiveMessage", message);
+    // });
+    socket.on("sendMessage", async (message) => {
         try {
-            // Update DB
-            await Message.updateMany(
-                { chat: chatId, receiver: userId, readBy: { $ne: userId } },
-                { $push: { readBy: userId }, $set: { status: "read" } }
-            );
+            // Find the chat participants
+            const chat = await Chat.findById(message.chatId).populate("users", "_id");
 
-            // Broadcast to everyone in the room
-            io.to(chatId).emit("messagesReadUpdate", { chatId, userId });
+            if (!chat) return console.log("❌ Chat not found:", message.chatId);
+
+            chat.users.forEach((user) => {
+                if (user._id.toString() === message.sender._id.toString()) return; // skip sender
+
+                const sockets = onlineUsers[user._id.toString()];
+                if (sockets) {
+                    sockets.forEach((sid) => {
+                        io.to(sid).emit("receiveMessage", message);
+                    });
+                }
+            });
         } catch (err) {
-            console.error("❌ messagesRead error:", err);
+            console.error("❌ sendMessage error:", err);
         }
     });
 
-    socket.on("markRead", ({ chatId, userId }) => {
-        socket.to(chatId).emit("messagesRead", { chatId, userId });
-    });
     // disconnect
-    socket.on("disconnect", () => {
-        console.log("❌ Client disconnected:", socket.id);
+    socket.on("disconnect", async () => {
+        let disconnectedUserId = null;
+
+        for (const [userId, sockets] of Object.entries(onlineUsers)) {
+            if (sockets.has(socket.id)) {
+                sockets.delete(socket.id);
+                if (sockets.size === 0) {
+                    delete onlineUsers[userId];
+                    disconnectedUserId = userId;
+                }
+                break;
+            }
+        }
+
+        if (disconnectedUserId) {
+            await User.findByIdAndUpdate(disconnectedUserId, {
+                onlineStatus: false,
+                lastSeen: new Date(),
+            });
+            io.emit("userOffline", {
+                userId: disconnectedUserId,
+                online: false,
+                lastSeen: new Date(),
+            });
+            console.log("❌ User went offline:", disconnectedUserId);
+        }
     });
+
+});
+
+// backend route
+app.get("/online-users", (req, res) => {
+    res.json({ onlineUsers: Object.keys(onlineUsers) });
 });
 
 
@@ -99,5 +148,3 @@ process.on("unhandledRejection", (err) => {
         process.exit(1);
     });
 });
-
-
