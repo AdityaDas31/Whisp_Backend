@@ -6,6 +6,7 @@ const http = require("http");
 const { Server } = require("socket.io");
 const User = require("./models/userModels");
 const Chat = require("./models/chatModel");
+const Message = require("./models/messageModel");
 
 
 // Config
@@ -42,23 +43,45 @@ const io = new Server(httpServer, {
 });
 
 let onlineUsers = {};
+const activeChatUsers = {};
 // --- SOCKET.IO EVENTS ---
 io.on("connection", (socket) => {
     console.log("⚡ New client connected:", socket.id);
 
     // Join room for a chat
-    socket.on("joinRoom", (chatId) => {
+    socket.on("joinRoom", ({ chatId }) => {
+        if (!socket.userId) return;
+
         socket.join(chatId);
-        console.log(`User joined room: ${chatId}`);
+
+        if (!activeChatUsers[chatId]) {
+            activeChatUsers[chatId] = new Set();
+        }
+
+        // activeChatUsers[chatId].add(socket.id);
+        activeChatUsers[chatId].add(socket.userId);
+
+
+        console.log(`✅ socket ${socket.id} joined chat ${chatId}`);
     });
 
-    socket.on("leaveRoom", (chatId) => {
+
+
+    socket.on("leaveRoom", ({ chatId }) => {
         socket.leave(chatId);
-        console.log(`👋 ${socket.id} left room: ${chatId}`);
+        // activeChatUsers[chatId]?.delete(socket.id);
+        activeChatUsers[chatId]?.delete(socket.userId);
+
+        console.log(`👋 socket ${socket.id} left chat ${chatId}`);
     });
+
+
+    // Listen for messages
+
 
     socket.on("registerUser", async (userId) => {
-        if (!userId) return;
+        socket.userId = userId;
+        socket.join(userId.toString());
 
         if (!onlineUsers[userId]) {
             onlineUsers[userId] = new Set();
@@ -67,65 +90,155 @@ io.on("connection", (socket) => {
 
         await User.findByIdAndUpdate(userId, { onlineStatus: true });
 
-        io.emit("userOnline", { userId, online: true });
-        console.log("✅ User registered online:", userId, onlineUsers[userId]);
+        // 🔥 DELIVER ALL PENDING SENT MESSAGES
+        const pendingMessages = await Message.find({
+            sender: { $ne: userId },
+            status: "sent",
+            chat: {
+                $in: await Chat.find({ users: userId }).distinct("_id")
+            }
+        });
+
+        for (const msg of pendingMessages) {
+            await Message.findByIdAndUpdate(msg._id, {
+                status: "delivered",
+                deliveredAt: new Date(),
+            });
+
+            // notify sender
+            io.to(msg.sender.toString()).emit("messageDelivered", {
+                messageId: msg._id,
+                chatId: msg.chat.toString(),
+            });
+        }
+
+        // ✅ 1. SEND CURRENT ONLINE USERS TO THIS USER ONLY
+        socket.emit("onlineUsersList", {
+            users: Object.keys(onlineUsers),
+        });
+
+        // ✅ 2. INFORM OTHERS THAT THIS USER CAME ONLINE
+        socket.broadcast.emit("userOnline", { userId });
     });
 
-    // Listen for messages
-    // socket.on("sendMessage", (message) => {
-    //     // io.to(message.chatId).emit("receiveMessage", message);
-    //     socket.to(message.chatId).emit("receiveMessage", message);
-    // });
+
+
+
     socket.on("sendMessage", async (message) => {
         try {
-            // Find the chat participants
-            const chat = await Chat.findById(message.chatId).populate("users", "_id");
+            const chatId = message.chatId || message.chat?._id;
+            const chat = await Chat.findById(chatId).populate("users", "_id");
+            if (!chat) return;
 
-            if (!chat) return console.log("❌ Chat not found:", message.chatId);
+            for (const chatUser of chat.users) {
+                const receiverId = chatUser._id.toString();
 
-            chat.users.forEach((user) => {
-                if (user._id.toString() === message.sender._id.toString()) return; // skip sender
+                // skip sender
+                if (receiverId === message.sender._id.toString()) continue;
 
-                const sockets = onlineUsers[user._id.toString()];
-                if (sockets) {
-                    sockets.forEach((sid) => {
-                        io.to(sid).emit("receiveMessage", message);
+                const receiverSockets = onlineUsers[receiverId] || new Set();
+
+                // ✅ CHECK IF RECEIVER IS ACTIVE IN THIS CHAT
+                // const isReceiverInChat = [...receiverSockets].some(
+                //     sid => activeChatUsers[chatId]?.has(sid)
+                // );
+                const isReceiverInChat = activeChatUsers[chatId]?.has(receiverId);
+
+
+                if (isReceiverInChat) {
+                    // ✅ SEEN immediately
+                    await Message.findByIdAndUpdate(message._id, {
+                        status: "seen",
+                        seenAt: new Date(),
+                    });
+
+                    io.to(message.sender._id.toString()).emit("messageSeen", {
+                        messageId: message._id,
+                        chatId,
                     });
                 }
-            });
+                else if (receiverSockets.size > 0) {
+                    // ✅ DELIVERED (online but not in chat)
+                    await Message.findByIdAndUpdate(message._id, {
+                        status: "delivered",
+                        deliveredAt: new Date(),
+                    });
+
+                    io.to(message.sender._id.toString()).emit("messageDelivered", {
+                        messageId: message._id,
+                        chatId,
+                    });
+                }
+
+                // ✅ ALWAYS send message to receiver sockets
+                receiverSockets.forEach((sid) => {
+                    io.to(sid).emit("receiveMessage", message);
+                });
+            }
         } catch (err) {
             console.error("❌ sendMessage error:", err);
         }
     });
 
+
+
+    // mark message as seen
+    socket.on("markSeen", async ({ chatId }) => {
+        if (!activeChatUsers[chatId]?.has(socket.userId)) return;
+
+        const messages = await Message.find({
+            chat: chatId,
+            sender: { $ne: socket.userId },
+            status: { $ne: "seen" },
+        });
+
+        await Message.updateMany(
+            { _id: { $in: messages.map(m => m._id) } },
+            { status: "seen", seenAt: new Date() }
+        );
+
+        messages.forEach(msg => {
+            io.to(msg.sender.toString()).emit("messageSeen", {
+                messageId: msg._id,
+                chatId,
+            });
+        });
+    });
+
+
     // disconnect
     socket.on("disconnect", async () => {
-        let disconnectedUserId = null;
+        if (!socket.userId) return;
 
-        for (const [userId, sockets] of Object.entries(onlineUsers)) {
-            if (sockets.has(socket.id)) {
-                sockets.delete(socket.id);
-                if (sockets.size === 0) {
-                    delete onlineUsers[userId];
-                    disconnectedUserId = userId;
-                }
-                break;
+        // remove socket from onlineUsers
+        const sockets = onlineUsers[socket.userId];
+        if (sockets) {
+            sockets.delete(socket.id);
+
+            if (sockets.size === 0) {
+                delete onlineUsers[socket.userId];
+
+                await User.findByIdAndUpdate(socket.userId, {
+                    onlineStatus: false,
+                    lastSeen: new Date(),
+                });
+
+                io.emit("userOffline", {
+                    userId: socket.userId,
+                    lastSeen: new Date(),
+                });
             }
         }
 
-        if (disconnectedUserId) {
-            await User.findByIdAndUpdate(disconnectedUserId, {
-                onlineStatus: false,
-                lastSeen: new Date(),
-            });
-            io.emit("userOffline", {
-                userId: disconnectedUserId,
-                online: false,
-                lastSeen: new Date(),
-            });
-            console.log("❌ User went offline:", disconnectedUserId);
+        // remove socket from all active chats
+        for (const chatId in activeChatUsers) {
+            activeChatUsers[chatId]?.delete(socket.userId);
         }
+
+        console.log("❌ socket disconnected:", socket.id);
     });
+
+
 
 });
 

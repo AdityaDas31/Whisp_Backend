@@ -2,6 +2,8 @@ const Chat = require('../models/chatModel');
 const User = require('../models/userModels');
 const catchAsyncErrors = require("../middleware/catchAsyncError");
 const ErrorHandler = require("../utils/errorhandler");
+const Message = require('../models/messageModel');
+
 
 
 // 1️⃣ Create or get a chat between two users
@@ -44,7 +46,9 @@ exports.accessChat = catchAsyncErrors(async (req, res, next) => {
 // 2️⃣ Fetch all chats of logged-in user
 exports.fetchChats = catchAsyncErrors(async (req, res, next) => {
     try {
-        let chats = await Chat.find({ users: { $elemMatch: { $eq: req.user._id } } })
+        let chats = await Chat.find({
+            users: { $elemMatch: { $eq: req.user._id } },
+        })
             .populate("users", "-password")
             .populate("groupAdmin", "-password")
             .populate("latestMessage")
@@ -55,11 +59,31 @@ exports.fetchChats = catchAsyncErrors(async (req, res, next) => {
             select: "name email profileImage",
         });
 
-        res.status(200).json({ success: true, chats });
+        // 🔥 ADD unreadCount per chat (backend-driven)
+        const chatsWithUnread = await Promise.all(
+            chats.map(async (chat) => {
+                const unreadCount = await Message.countDocuments({
+                    chat: chat._id,
+                    sender: { $ne: req.user._id },
+                    status: { $ne: "seen" },
+                });
+
+                return {
+                    ...chat.toObject(),
+                    unreadCount,
+                };
+            })
+        );
+
+        res.status(200).json({
+            success: true,
+            chats: chatsWithUnread,
+        });
     } catch (error) {
         next(new ErrorHandler(error.message, 500));
     }
 });
+
 
 
 exports.createGroupChat = catchAsyncErrors(async (req, res, next) => {
