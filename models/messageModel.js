@@ -5,10 +5,12 @@ const messageSchema = new mongoose.Schema(
         sender: {
             type: mongoose.Schema.Types.ObjectId,
             ref: "User",
+            required: true,
         },
         chat: {
             type: mongoose.Schema.Types.ObjectId,
             ref: "Chat",
+            required: true,
         },
         type: {
             type: String,
@@ -44,13 +46,24 @@ const messageSchema = new mongoose.Schema(
                 },
             ],
         },
-        status: {
-            type: String,
-            enum: ["sent", "delivered", "seen"],
-            default: "sent",
-        },
-        deliveredAt: Date,
-        seenAt: Date,
+        receivers: [{
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "User",
+        }],
+
+        deliveredTo: [{
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "User",
+        }],
+
+        seenBy: [{
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "User",
+        }],
+        payloadStripped: {
+            type: Boolean,
+            default: false,
+        }
     },
     { timestamps: true }
 );

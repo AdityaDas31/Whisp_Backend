@@ -5,7 +5,6 @@ const catchAsyncErrors = require("../middleware/catchAsyncError");
 const ErrorHandler = require("../utils/errorhandler");
 const cloudinary = require("cloudinary");
 
-
 // 3️⃣ Send a message
 exports.sendMessage = catchAsyncErrors(async (req, res, next) => {
     const { content, chatId, type, location, contact, poll } = req.body;
@@ -14,11 +13,29 @@ exports.sendMessage = catchAsyncErrors(async (req, res, next) => {
         return next(new ErrorHandler("ChatId is required", 400));
     }
 
+    // 1️⃣ Fetch chat and users
+    const chat = await Chat.findById(chatId).populate("users", "_id");
+    if (!chat) {
+        return next(new ErrorHandler("Chat not found", 404));
+    }
+
+    // 2️⃣ Determine receivers (exclude sender)
+    const receivers = chat.users
+        .map(u => u._id.toString())
+        .filter(id => id !== req.user._id.toString());
+
+    if (receivers.length === 0) {
+        return next(new ErrorHandler("No receivers found", 400));
+    }
+
     let newMessage = {
         sender: req.user._id,
         chat: chatId,
         type: type || "text",
-        status: "sent",
+
+        receivers,        // 🔥 pending delivery
+        deliveredTo: [],  // will be filled by ACK
+        seenBy: [],
     };
 
     if (type === "text") {
@@ -54,50 +71,52 @@ exports.sendMessage = catchAsyncErrors(async (req, res, next) => {
         };
     }
 
+    // 6️⃣ Save TEMP message
+    let message = await Message.create(newMessage);
+
+    // 7️⃣ Populate (for socket payload)
+    message = await message.populate("sender", "name profileImage");
+    message = await message.populate("chat");
+
+    // ⚠️ DO NOT treat DB as history anymore
+    // latestMessage can remain (for chat list preview only)
+    await Chat.findByIdAndUpdate(chatId, {
+        latestMessage: message._id,
+    });
+
+    // Send push notification
     try {
-        let message = await Message.create(newMessage);
+        const chat = await Chat.findById(chatId).populate("users", "expoPushToken _id");
+        const recipients = chat.users.filter(u => u._id.toString() !== req.user._id.toString());
 
-        message = await message.populate("sender", "name profileImage");
-        message = await message.populate("chat");
-        message = await User.populate(message, {
-            path: "chat.users",
-            select: "name profileImage email",
-        });
-
-        await Chat.findByIdAndUpdate(chatId, { latestMessage: message });
-
-        // Send push notification
-        try {
-            const chat = await Chat.findById(chatId).populate("users", "expoPushToken _id");
-            const recipients = chat.users.filter(u => u._id.toString() !== req.user._id.toString());
-
-            for (let recipient of recipients) {
-                if (recipient.expoPushToken) {
-                    await fetch("https://exp.host/--/api/v2/push/send", {
-                        method: "POST",
-                        headers: {
-                            "Accept": "application/json",
-                            "Accept-encoding": "gzip, deflate",
-                            "Content-Type": "application/json",
-                        },
-                        body: JSON.stringify({
-                            to: recipient.expoPushToken,
-                            sound: "default",
-                            title: `${message.sender.name}`,
-                            body: message.type === "text" ? message.content : "📎 Sent you a file",
-                            data: { chatId: chatId },
-                        }),
-                    });
-                }
+        for (let recipient of recipients) {
+            if (recipient.expoPushToken) {
+                await fetch("https://exp.host/--/api/v2/push/send", {
+                    method: "POST",
+                    headers: {
+                        "Accept": "application/json",
+                        "Accept-encoding": "gzip, deflate",
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        to: recipient.expoPushToken,
+                        sound: "default",
+                        title: `${message.sender.name}`,
+                        body: message.type === "text" ? message.content : "📎 Sent you a file",
+                        data: { chatId: chatId },
+                    }),
+                });
             }
-        } catch (err) {
-            console.error("❌ Push notification error:", err.message);
         }
-
-        res.status(200).json({ success: true, message });
-    } catch (error) {
-        next(new ErrorHandler(error.message, 500));
+    } catch (err) {
+        console.error("❌ Push notification error:", err.message);
     }
+
+    res.status(200).json({
+        success: true,
+        message,
+    });
+
 });
 
 
