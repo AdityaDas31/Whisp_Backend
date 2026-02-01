@@ -31,15 +31,15 @@ exports.sendOtpEmail = catchAsyncErrors(async (req, res, next) => {
   await userOTP.create({ email, otp });
 
   // send OTP via email
-  try {
-    await sendEmail({
-      email,
-      subject: "OTP Verification",
-      message: `<p>Your OTP code is: <b>${otp}</b>. It is valid for 5 minutes.</p>`
-    });
-  } catch (error) {
-    console.error("❌ Email send failed:", err);
-  }
+  console.log("📨 About to send OTP email to:", email);
+
+  await sendEmail({
+    email,
+    subject: "OTP Verification",
+    message: `<p>Your OTP code is: <b>${otp}</b>. It is valid for 5 minutes.</p>`
+  });
+
+  console.log("✅ sendEmail() finished");
 
 
   res.status(200).json({
