@@ -1,24 +1,27 @@
-const nodeMailer = require("nodemailer");
+const nodemailer = require("nodemailer");
 
-const sendEmail = async(option)=>{
-    const transporter=nodeMailer.createTransport({
+const sendEmail = async (options) => {
+    const transporter = nodemailer.createTransport({
         host: process.env.SMTP_HOST,
-        port :process.env.SMTP_PORT, //587 for gmail and 465 for outlook
-        service: process.env.SMTP_SERVICE,
-        auth:{
+        port: Number(process.env.SMTP_PORT),
+        secure: false, // true for 465, false for 587
+        auth: {
             user: process.env.SMTP_MAIL,
             pass: process.env.SMTP_PASSWORD,
         },
+        tls: {
+            rejectUnauthorized: false,
+        },
     });
 
-    const mailOPtions ={
-        from: '"Whisp" <process.env.SMTP_MAIL>',
-        to: option.email,
-        subject: option.subject,
-        // text: option.message,
-        html: option.message
+    const mailOptions = {
+        from: `"Whisp" <${process.env.SMTP_MAIL}>`,
+        to: options.email,
+        subject: options.subject,
+        html: options.message,
     };
-    await transporter.sendMail(mailOPtions);
+
+    await transporter.sendMail(mailOptions);
 };
 
 module.exports = sendEmail;
