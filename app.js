@@ -12,7 +12,7 @@ const  errorMiddleware = require("./middleware/error");
 dotenv.config();
 
 
-const allowedOrigins = ['http://localhost:5173'];
+const allowedOrigins = ['http://localhost:5173', 'https://whisp-backend-api.onrender.com'];
 
 const corsOptions = {
   origin: function (origin, callback) {
