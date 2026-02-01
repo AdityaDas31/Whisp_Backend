@@ -9,7 +9,8 @@ const User = require("./models/userModels");
 const Message = require("./models/messageModel");
 
 // Config
-dotenv.config({ path: "backend/config/.env" });
+// dotenv.config({ path: "backend/config/.env" });
+dotenv.config();
 
 // DB
 connectDatabase();

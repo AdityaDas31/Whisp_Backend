@@ -8,8 +8,8 @@ const cors = require('cors')
 const  errorMiddleware = require("./middleware/error");
 
 
-dotenv.config({path:"backend/config/.env"});
-
+// dotenv.config({path:"backend/config/.env"});
+dotenv.config();
 
 
 const allowedOrigins = ['http://localhost:5173'];

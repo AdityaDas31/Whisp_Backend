@@ -9,7 +9,8 @@ const MongoClient = require('mongodb').MongoClient;
 
 mongoose.set('strictQuery', false);
 
-dotenv.config({ path: "config/.env" });
+// dotenv.config({ path: "config/.env" });
+dotenv.config();
 
 const connectDatabase = async () => {
     try {
