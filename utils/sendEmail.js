@@ -2,23 +2,20 @@ const nodemailer = require("nodemailer");
 
 const sendEmail = async (options) => {
     const transporter = nodemailer.createTransport({
-        host: "smtp.gmail.com",
-        port: 587,
-        secure: false, // TLS
+        host: process.env.SMTP_HOST,
+        port: Number(process.env.SMTP_PORT),
+        secure: false,
         auth: {
-            user: process.env.SMTP_MAIL,
-            pass: process.env.SMTP_PASSWORD, // APP PASSWORD
+            user: process.env.SMTP_MAIL,      // "apikey"
+            pass: process.env.SMTP_PASSWORD,  // Brevo key
         },
-        tls: {
-            rejectUnauthorized: false,
-        },
-        connectionTimeout: 10000, // 10s
+        connectionTimeout: 10000,
     });
 
-    await transporter.verify(); // 🔥 THIS WILL THROW IF BLOCKED
+    await transporter.verify(); // will fail loudly if wrong
 
     await transporter.sendMail({
-        from: `"Whisp" <${process.env.SMTP_MAIL}>`,
+        from: `"Whisp" <no-reply@whisp.app>`, // can be anything initially
         to: options.email,
         subject: options.subject,
         html: options.message,
