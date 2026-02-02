@@ -24,7 +24,7 @@ exports.sendOtpEmail = catchAsyncErrors(async (req, res, next) => {
     return next(new ErrorHandler("User already exists", 401));
   }
 
-  // 1️⃣ Generate 6-digit OTP
+  // 1️⃣ Generate 4-digit OTP
   const otp = Math.floor(1000 + Math.random() * 9000).toString();
 
   // 2️⃣ Save OTP in DB (expires in 5 mins)
@@ -33,11 +33,23 @@ exports.sendOtpEmail = catchAsyncErrors(async (req, res, next) => {
   // send OTP via email
   console.log("📨 About to send OTP email to:", email);
 
-  await sendEmail({
-    email,
-    subject: "OTP Verification",
-    message: `<p>Your OTP code is: <b>${otp}</b>. It is valid for 5 minutes.</p>`
-  });
+  // await sendEmail({
+  //   email,
+  //   subject: "OTP Verification",
+  //   message: `<p>Your OTP code is: <b>${otp}</b>. It is valid for 5 minutes.</p>`
+  // });
+
+  try {
+    await sendEmail({
+      email,
+      subject: "OTP Verification",
+      message: `<p>Your OTP is <b>${otp}</b>. Valid for 5 minutes.</p>`
+    });
+  } catch (err) {
+    console.error("❌ Email failed:", err);
+    return next(new ErrorHandler("OTP email failed", 500));
+  }
+
 
   console.log("✅ sendEmail() finished");
 
