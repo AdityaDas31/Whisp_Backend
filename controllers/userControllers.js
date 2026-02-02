@@ -33,21 +33,21 @@ exports.sendOtpEmail = catchAsyncErrors(async (req, res, next) => {
   // send OTP via email
   console.log("📨 About to send OTP email to:", email);
 
-  // await sendEmail({
-  //   email,
-  //   subject: "OTP Verification",
-  //   message: `<p>Your OTP code is: <b>${otp}</b>. It is valid for 5 minutes.</p>`
-  // });
-
   try {
     await sendEmail({
       email,
       subject: "OTP Verification",
-      message: `<p>Your OTP is <b>${otp}</b>. Valid for 5 minutes.</p>`
+      message: `
+        <p>Your OTP is <b>${otp}</b></p>
+        <p>This code is valid for 5 minutes.</p>
+      `,
     });
   } catch (err) {
-    console.error("❌ Email failed:", err);
-    return next(new ErrorHandler("OTP email failed", 500));
+    console.error("❌ Email failed:", err.message);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to send OTP. Please try again."
+    });
   }
 
 
