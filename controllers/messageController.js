@@ -103,7 +103,14 @@ exports.sendMessage = catchAsyncErrors(async (req, res, next) => {
                         sound: "default",
                         title: `${message.sender.name}`,
                         body: message.type === "text" ? message.content : "📎 Sent you a file",
-                        data: { chatId: chatId },
+                        // data: { chatId: chatId },
+                        data: {
+                            chatId: chatId,
+                            senderId: message.sender._id,
+                            senderName: message.sender.name,
+                            profileImage: message.sender.profileImage?.url,
+                        },
+                        image: message.sender.profileImage?.url,
                     }),
                 });
             }
