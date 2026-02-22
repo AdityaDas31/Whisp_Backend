@@ -8,6 +8,8 @@ const cors = require('cors')
 const  errorMiddleware = require("./middleware/error");
 
 
+
+
 // dotenv.config({path:"backend/config/.env"});
 dotenv.config();
 
@@ -46,12 +48,14 @@ app.use(fileUpload({
 const user = require("./routes/userRoutes")
 const chat = require("./routes/chatRoutes")
 const message = require("./routes/messageRoutes")
+const story = require("./routes/storyRoutes")
 
 
 // Using the imported routes
 app.use("/api/v1/user", user);
 app.use("/api/v1/chat", chat);
 app.use("/api/v1/message", message);
+app.use("/api/v1/story", story);
 
 
 

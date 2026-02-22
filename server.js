@@ -12,14 +12,25 @@ const Message = require("./models/messageModel");
 dotenv.config();
 
 // DB
-connectDatabase();
+// connectDatabase();
+connectDatabase().then(() => {
+    // Cloudinary
+    cloudinary.config({
+        cloud_name: process.env.CLOUDINARY_NAME,
+        api_key: process.env.CLOUDINARY_API_KEY,
+        api_secret: process.env.CLOUDINARY_API_SECRET,
+    });
 
-// Cloudinary
-cloudinary.config({
-    cloud_name: process.env.CLOUDINARY_NAME,
-    api_key: process.env.CLOUDINARY_API_KEY,
-    api_secret: process.env.CLOUDINARY_API_SECRET,
+    // start cleanup job ONLY after DB connected
+    if (!global.storyCleanupStarted) {
+        require("./jobs/storyCleanup");
+        global.storyCleanupStarted = true;
+    }
+
+}).catch(err => {
+    console.error("DB connection failed:", err);
 });
+
 
 // Server
 const httpServer = http.createServer(app);

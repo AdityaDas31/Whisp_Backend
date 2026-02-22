@@ -5,7 +5,6 @@ const cloudinary = require("cloudinary");
 const sendToken = require("../utils/jwtToken");
 const userOTP = require('../models/userOtp');
 const sendEmail = require('../utils/sendEmail');
-const { sendWhatsAppMessage } = require('../utils/whatsapp');
 
 
 
@@ -87,7 +86,6 @@ exports.serdOtpPhone = catchAsyncErrors(async (req, res, next) => {
 
   // Send OTP via WhatsApp
   const fullPhone = `${countryCode}${phoneNumber}`; // Example: +91 9876543210
-  await sendWhatsAppMessage(fullPhone.replace("+", ""), `Your OTP is: ${otp}. It is valid for 5 minutes.`);
 
   res.status(200).json({
     success: true,
