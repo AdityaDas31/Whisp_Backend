@@ -7,6 +7,7 @@ const { Server } = require("socket.io");
 
 const User = require("./models/userModels");
 const Message = require("./models/messageModel");
+const CallLog = require("./models/CallLogModel");
 
 // Config
 dotenv.config();
@@ -267,6 +268,156 @@ io.on("connection", (socket) => {
 
         console.log("❌ Disconnected:", socket.id);
     });
+
+    // ================= CALL SIGNALING =================
+
+    // Initiate call
+    socket.on("call:initiate", async ({
+        to,
+        callId,
+        type,
+        callerId,
+        callerName,
+        callerImage
+    }) => {
+
+        console.log("📡 SERVER CALL EVENT");
+
+        // 🔹 CREATE CALL LOG
+        await CallLog.findOneAndUpdate(
+            { callId },
+            {
+                callId,
+                callerId,
+                receiverId: to,
+                type,
+                status: "ringing"
+            },
+            { upsert: true, new: true }
+        );
+
+        const receiverSockets = onlineUsers[to] || new Set();
+
+        receiverSockets.forEach((sid) => {
+            io.to(sid).emit("call:incoming", {
+                callId,
+                from: callerId,
+                name: callerName,
+                profileImage: callerImage
+            });
+        });
+    });
+
+    // Accept call
+    socket.on("call:accept", async ({ callId, to }) => {
+
+        // 🔹 UPDATE CALL STATUS
+        await CallLog.findOneAndUpdate(
+            { callId },
+            {
+                status: "connected",
+                startedAt: new Date()
+            }
+        );
+
+        const callerSockets = onlineUsers[to] || new Set();
+
+        callerSockets.forEach((sid) => {
+            io.to(sid).emit("call:accepted", { callId });
+        });
+    });
+
+    // Reject call
+    socket.on("call:reject", async ({ callId, to }) => {
+
+        await CallLog.findOneAndUpdate(
+            { callId },
+            {
+                status: "rejected",
+                endedAt: new Date()
+            }
+        );
+
+        const callerSockets = onlineUsers[to] || new Set();
+
+        callerSockets.forEach((sid) => {
+            io.to(sid).emit("call:rejected", { callId });
+        });
+    });
+
+    // End call
+    socket.on("call:end", async ({ callId, to }) => {
+
+        const call = await CallLog.findOne({ callId });
+
+        if (call) {
+
+            const endedAt = new Date();
+
+            let duration = 0;
+
+            if (call.startedAt) {
+                duration = Math.floor(
+                    (endedAt.getTime() - call.startedAt.getTime()) / 1000
+                );
+            }
+
+            await CallLog.updateOne(
+                { callId },
+                {
+                    status: "completed",
+                    endedAt,
+                    duration
+                }
+            );
+        }
+
+        const otherSockets = onlineUsers[to] || new Set();
+
+        otherSockets.forEach((sid) => {
+            io.to(sid).emit("call:ended", { callId });
+        });
+    });
+
+    // ================= WEBRTC SIGNALING =================
+
+    // Offer
+    socket.on("webrtc:offer", ({ to, offer }) => {
+        const sockets = onlineUsers[to] || new Set();
+
+        sockets.forEach((sid) => {
+            io.to(sid).emit("webrtc:offer", {
+                from: socket.userId,
+                offer,
+            });
+        });
+    });
+
+    // Answer
+    socket.on("webrtc:answer", ({ to, answer }) => {
+        const sockets = onlineUsers[to] || new Set();
+
+        sockets.forEach((sid) => {
+            io.to(sid).emit("webrtc:answer", {
+                from: socket.userId,
+                answer,
+            });
+        });
+    });
+
+    // ICE candidate
+    socket.on("webrtc:ice-candidate", ({ to, candidate }) => {
+        const sockets = onlineUsers[to] || new Set();
+
+        sockets.forEach((sid) => {
+            io.to(sid).emit("webrtc:ice-candidate", {
+                from: socket.userId,
+                candidate,
+            });
+        });
+    });
+
+
 });
 
 // Start server
