@@ -283,7 +283,6 @@ io.on("connection", (socket) => {
 
         console.log("📡 SERVER CALL EVENT");
 
-        // 🔹 CREATE CALL LOG
         await CallLog.findOneAndUpdate(
             { callId },
             {
@@ -296,6 +295,47 @@ io.on("connection", (socket) => {
             { upsert: true, new: true }
         );
 
+        // 🔥 Missed Call Timer
+        setTimeout(async () => {
+
+            try {
+
+                const call = await CallLog.findOne({ callId });
+
+                if (call && call.status === "ringing") {
+
+                    await CallLog.updateOne(
+                        { callId },
+                        {
+                            status: "missed",
+                            endedAt: new Date(),
+                            duration: 0
+                        }
+                    );
+
+                    console.log("📞 Missed call marked:", callId);
+
+                    // 🔥 END CALL FOR BOTH USERS
+                    const callerSockets = onlineUsers[callerId] || new Set();
+                    const receiverSockets = onlineUsers[to] || new Set();
+
+                    callerSockets.forEach((sid) => {
+                        io.to(sid).emit("call:ended", { callId });
+                    });
+
+                    receiverSockets.forEach((sid) => {
+                        io.to(sid).emit("call:ended", { callId });
+                    });
+
+                }
+
+            } catch (err) {
+                console.log("Missed call check error:", err);
+            }
+
+        }, 30000); // 30 seconds
+
+
         const receiverSockets = onlineUsers[to] || new Set();
 
         receiverSockets.forEach((sid) => {
@@ -306,6 +346,7 @@ io.on("connection", (socket) => {
                 profileImage: callerImage
             });
         });
+
     });
 
     // Accept call
@@ -352,24 +393,31 @@ io.on("connection", (socket) => {
 
         if (call) {
 
-            const endedAt = new Date();
+            // ❗ Only complete if call was connected
+            if (call.status === "connected") {
 
-            let duration = 0;
+                const endedAt = new Date();
 
-            if (call.startedAt) {
-                duration = Math.floor(
-                    (endedAt.getTime() - call.startedAt.getTime()) / 1000
+                let duration = 0;
+
+                if (call.startedAt) {
+                    duration = Math.floor(
+                        (endedAt.getTime() - call.startedAt.getTime()) / 1000
+                    );
+                }
+
+                await CallLog.updateOne(
+                    { callId },
+                    {
+                        status: "completed",
+                        endedAt,
+                        duration
+                    }
                 );
+
             }
 
-            await CallLog.updateOne(
-                { callId },
-                {
-                    status: "completed",
-                    endedAt,
-                    duration
-                }
-            );
+            // If status already missed/rejected → DO NOTHING
         }
 
         const otherSockets = onlineUsers[to] || new Set();
@@ -377,6 +425,7 @@ io.on("connection", (socket) => {
         otherSockets.forEach((sid) => {
             io.to(sid).emit("call:ended", { callId });
         });
+
     });
 
     // ================= WEBRTC SIGNALING =================
