@@ -343,7 +343,8 @@ io.on("connection", (socket) => {
                 callId,
                 from: callerId,
                 name: callerName,
-                profileImage: callerImage
+                profileImage: callerImage,
+                type 
             });
         });
 
