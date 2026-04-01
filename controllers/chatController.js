@@ -51,7 +51,8 @@ exports.fetchChats = catchAsyncErrors(async (req, res, next) => {
             users: { $elemMatch: { $eq: req.user._id } },
         })
             .populate("users", "-password")
-            .populate("groupAdmin", "-password")
+            // .populate("groupAdmin", "-password")
+            .populate("groupAdmins", "name profileImage email")
             .populate("latestMessage")
             .sort({ updatedAt: -1 });
 
@@ -88,36 +89,6 @@ exports.fetchChats = catchAsyncErrors(async (req, res, next) => {
 
 // 3️⃣ Create a new group chat
 
-// exports.createGroupChat = catchAsyncErrors(async (req, res, next) => {
-//     const { name, users } = req.body;
-
-//     if (!name) {
-//         return next(new ErrorHandler("Group name is required", 400));
-//     }
-
-//     if (!users || users.length < 2) {
-//         return next(new ErrorHandler("Select at least 2 users", 400));
-//     }
-
-//     // include creator in group
-//     const groupUsers = [...users, req.user._id];
-
-//     const groupChat = await Chat.create({
-//         chatName: name,
-//         isGroupChat: true,
-//         users: groupUsers,
-//         groupAdmin: req.user._id,
-//     });
-
-//     const fullGroup = await Chat.findById(groupChat._id)
-//         .populate("users", "name profileImage email")
-//         .populate("groupAdmin", "name profileImage email");
-
-//     res.status(201).json({
-//         success: true,
-//         chat: fullGroup,
-//     });
-// });
 
 exports.createGroupChat = catchAsyncErrors(async (req, res, next) => {
 
@@ -169,7 +140,7 @@ exports.createGroupChat = catchAsyncErrors(async (req, res, next) => {
 
             users: [...users, req.user._id],
 
-            groupAdmin: req.user._id,
+            groupAdmins: [req.user._id],
 
             groupImage
 
@@ -180,7 +151,7 @@ exports.createGroupChat = catchAsyncErrors(async (req, res, next) => {
 
             .populate("users", "name profileImage")
 
-            .populate("groupAdmin", "name profileImage");
+            .populate("groupAdmins", "name profileImage");
 
 
         res.status(201).json({
@@ -207,12 +178,171 @@ exports.createGroupChat = catchAsyncErrors(async (req, res, next) => {
 
 // 4️⃣ Delete Group 
 
+// exports.deleteGroupChat = catchAsyncErrors(async (req, res, next) => {
+
+//     const { chatId } = req.params;
+
+
+//     // 1️⃣ find chat
+//     const chat = await Chat.findById(chatId);
+
+//     if (!chat) {
+
+//         return next(
+//             new ErrorHandler("Group not found", 404)
+//         );
+
+//     }
+
+
+//     // 2️⃣ ensure group chat
+//     if (!chat.isGroupChat) {
+
+//         return next(
+//             new ErrorHandler("Not a group chat", 400)
+//         );
+
+//     }
+
+
+//     // 3️⃣ check admin permission
+//     if (
+
+//         chat.groupAdmins.toString() !==
+//         req.user._id.toString()
+
+//     ) {
+
+//         return next(
+//             new ErrorHandler("Only admin can delete group", 403)
+//         );
+
+//     }
+
+
+//     // 4️⃣ delete cloudinary image
+//     if (chat.groupImage?.publicId) {
+
+//         await cloudinary.v2.uploader.destroy(
+
+//             chat.groupImage.publicId
+
+//         );
+
+//     }
+
+
+//     // 5️⃣ delete messages
+//     await Message.deleteMany({
+
+//         chat: chatId
+
+//     });
+
+
+//     // 6️⃣ delete chat
+//     await Chat.findByIdAndDelete(chatId);
+
+
+//     res.status(200).json({
+
+//         success: true,
+//         message: "Group deleted"
+
+//     });
+
+// });
+
 exports.deleteGroupChat = catchAsyncErrors(async (req, res, next) => {
 
-    const { chatId } = req.params;
+        const { chatId } = req.params;
+
+        const chat = await Chat.findById(chatId);
+
+        if (!chat) {
+
+            return next(
+                new ErrorHandler(
+                    "Group not found",
+                    404
+                )
+            );
+
+        }
+
+        if (!chat.isGroupChat) {
+
+            return next(
+                new ErrorHandler(
+                    "Not a group chat",
+                    400
+                )
+            );
+
+        }
+
+        // ✅ FIXED
+        const isAdmin =
+            chat.groupAdmins.some(
+
+                admin =>
+                    admin.toString()
+                    === req.user._id.toString()
+
+            );
+
+        if (!isAdmin) {
+
+            return next(
+                new ErrorHandler(
+                    "Only admin can delete group",
+                    403
+                )
+            );
+
+        }
+
+        // delete cloudinary image
+        if (chat.groupImage?.publicId) {
+
+            await cloudinary.v2.uploader.destroy(
+
+                chat.groupImage.publicId
+
+            );
+
+        }
+
+        // delete messages
+        await Message.deleteMany({
+
+            chat: chatId
+
+        });
+
+        // delete chat
+        await Chat.findByIdAndDelete(
+
+            chatId
+
+        );
+
+        res.status(200).json({
+
+            success: true,
+            message: "Group deleted"
+
+        });
+
+    });
 
 
-    // 1️⃣ find chat
+// make new admin 
+
+exports.makeGroupAdmin = catchAsyncErrors(async (req, res, next) => {
+
+    const { chatId, userId } = req.body;
+
     const chat = await Chat.findById(chatId);
 
     if (!chat) {
@@ -223,64 +353,111 @@ exports.deleteGroupChat = catchAsyncErrors(async (req, res, next) => {
 
     }
 
-
-    // 2️⃣ ensure group chat
     if (!chat.isGroupChat) {
 
         return next(
-            new ErrorHandler("Not a group chat", 400)
+            new ErrorHandler("Not group chat", 400)
         );
 
     }
 
+    // check requester is admin
+    const isRequesterAdmin =
+        chat.groupAdmins.some(
 
-    // 3️⃣ check admin permission
-    if (
+            admin =>
+                admin.toString() ===
+                req.user._id.toString()
 
-        chat.groupAdmin.toString() !==
-        req.user._id.toString()
+        );
 
-    ) {
+    if (!isRequesterAdmin) {
 
         return next(
-            new ErrorHandler("Only admin can delete group", 403)
+            new ErrorHandler(
+                "Only admin can add new admin",
+                403
+            )
         );
 
     }
 
+    // check member exists
+    const isMember =
+        chat.users.some(
 
-    // 4️⃣ delete cloudinary image
-    if (chat.groupImage?.publicId) {
+            u => u.toString() === userId
 
-        await cloudinary.v2.uploader.destroy(
+        );
 
-            chat.groupImage.publicId
+    if (!isMember) {
 
+        return next(
+            new ErrorHandler(
+                "User not in group",
+                400
+            )
         );
 
     }
 
+    // already admin check
+    const alreadyAdmin =
+        chat.groupAdmins.some(
 
-    // 5️⃣ delete messages
-    await Message.deleteMany({
+            admin =>
+                admin.toString() === userId
 
-        chat: chatId
+        );
 
-    });
+    if (alreadyAdmin) {
+
+        return res.status(200).json({
+
+            success: true,
+            message: "Already admin"
+
+        });
+
+    }
+
+    // add new admin
+    chat.groupAdmins.push(userId);
+
+    await chat.save();
 
 
-    // 6️⃣ delete chat
-    await Chat.findByIdAndDelete(chatId);
+    const updatedChat =
+        await Chat.findById(chatId)
+
+            .populate(
+                "users",
+                "name profileImage"
+            )
+
+            .populate(
+                "groupAdmins",
+                "name profileImage"
+            );
 
 
     res.status(200).json({
 
         success: true,
-        message: "Group deleted"
+
+        message: "Admin added",
+
+        chat: updatedChat
 
     });
 
 });
+
+// Leave from group 
+
+exports.leaveGroupChat = catchAsyncErrors(async (req, res, next) => {
+
+})
 
 
 // exports.createGroupChat = catchAsyncErrors(async (req, res, next) => {
