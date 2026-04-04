@@ -15,6 +15,18 @@ const chatSchema = new mongoose.Schema({
       ref: "User",
     },
   ],
+  leftUsers: [
+    {
+      user: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User"
+      },
+      leftAt: {
+        type: Date,
+        default: Date.now
+      }
+    }
+  ],
   latestMessage: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Message",

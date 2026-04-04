@@ -1,6 +1,6 @@
 const express = require("express");
 const { isAuthenticatedUser } = require("../middleware/auth");
-const { accessChat, fetchChats, createGroupChat, deleteGroupChat, makeGroupAdmin } = require("../controllers/chatController");
+const { accessChat, fetchChats, createGroupChat, deleteGroupChat, makeGroupAdmin, leaveGroup, addMemberToGroup, removeMemberFromGroup } = require("../controllers/chatController");
 
 const router = express.Router();
 
@@ -11,6 +11,9 @@ router.get("/chats", isAuthenticatedUser, fetchChats);
 router.post("/group", isAuthenticatedUser, createGroupChat);
 router.delete("/group/:chatId", isAuthenticatedUser, deleteGroupChat);
 router.put("/group/admin", isAuthenticatedUser, makeGroupAdmin)
+router.put("/group/leave", isAuthenticatedUser, leaveGroup);
+router.put("/group/add-member", isAuthenticatedUser, addMemberToGroup);
+router.put("/group/remove-member", isAuthenticatedUser, removeMemberFromGroup);
 
 
 
