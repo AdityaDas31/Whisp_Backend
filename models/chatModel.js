@@ -41,6 +41,12 @@ const chatSchema = new mongoose.Schema({
     url: String,
     publicId: String
   },
+  description: {
+    type: String,
+    default: null,
+    trim: true,
+    maxlength: 250
+  },
 },
   { timestamps: true }
 );

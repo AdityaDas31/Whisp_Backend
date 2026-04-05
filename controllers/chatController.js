@@ -709,3 +709,74 @@ exports.removeMemberFromGroup = catchAsyncErrors(async (req, res, next) => {
     });
 
 });
+
+// update group name or image (ADMIN ONLY)
+
+exports.updateGroupInfo = catchAsyncErrors(async (req, res, next) => {
+
+    const { chatId, name, description } = req.body;
+
+    const chat = await Chat.findById(chatId);
+
+    if (!chat)
+        return next(new ErrorHandler("Group not found", 404));
+
+    if (!chat.isGroupChat)
+        return next(new ErrorHandler("Not group chat", 400));
+
+    // check requester is admin
+    const isAdmin = chat.groupAdmins.some(
+        admin => admin.toString() === req.user._id.toString()
+    );
+
+    if (!isAdmin)
+        return next(
+            new ErrorHandler("Only admin can update group", 403)
+        );
+
+    // update name
+    if (name) {
+        chat.chatName = name;
+    }
+
+    if (description !== undefined) {
+        chat.description = description || null;
+    }
+
+    // update image
+    if (req.files?.groupImage) {
+
+        // delete old image
+        if (chat.groupImage?.publicId) {
+            await cloudinary.v2.uploader.destroy(
+                chat.groupImage.publicId
+            );
+        }
+
+        const upload = await cloudinary.v2.uploader.upload(
+            req.files.groupImage.tempFilePath,
+            {
+                folder: "whisp/group_images"
+            }
+        );
+
+        chat.groupImage = {
+            url: upload.secure_url,
+            publicId: upload.public_id
+        };
+    }
+
+    await chat.save();
+
+    const updatedChat =
+        await Chat.findById(chatId)
+            .populate("users", "name profileImage")
+            .populate("groupAdmins", "name profileImage");
+
+    res.status(200).json({
+        success: true,
+        message: "Group updated",
+        chat: updatedChat
+    });
+
+});
