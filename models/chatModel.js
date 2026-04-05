@@ -15,17 +15,37 @@ const chatSchema = new mongoose.Schema({
       ref: "User",
     },
   ],
+  leftUsers: [
+    {
+      user: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User"
+      },
+      leftAt: {
+        type: Date,
+        default: Date.now
+      }
+    }
+  ],
   latestMessage: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Message",
   },
-  groupAdmin: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "User",
-  },
+  groupAdmins: [
+    {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User"
+    }
+  ],
   groupImage: {
     url: String,
     publicId: String
+  },
+  description: {
+    type: String,
+    default: null,
+    trim: true,
+    maxlength: 250
   },
 },
   { timestamps: true }
