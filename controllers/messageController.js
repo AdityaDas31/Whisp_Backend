@@ -142,44 +142,81 @@ exports.allMessages = catchAsyncErrors(async (req, res, next) => {
     }
 });
 
-
-
+// 5️⃣ Delete message
 
 exports.deleteMessage = catchAsyncErrors(async (req, res, next) => {
-    const message = await Message.findById(req.params.id);
+
+    const { messageId } = req.params;
+
+    const message = await Message.findById(messageId).populate("chat");
 
     if (!message) {
         return next(new ErrorHandler("Message not found", 404));
     }
 
-    if (message.sender.toString() !== req.user._id.toString()) {
-        return next(new ErrorHandler("You can only delete your own messages", 403));
+    const chat = await Chat.findById(message.chat._id);
+
+    const isSender =
+        message.sender.toString() === req.user._id.toString();
+
+    const isAdmin =
+        chat.groupAdmins?.some(
+            admin => admin.toString() === req.user._id.toString()
+        );
+
+    // permission rules
+    if (chat.isGroupChat) {
+
+        if (!isSender && !isAdmin) {
+            return next(new ErrorHandler("Not allowed", 403));
+        }
+
+    } else {
+
+        if (!isSender) {
+            return next(new ErrorHandler("Not allowed", 403));
+        }
+
     }
 
-    await message.deleteOne();
+    // mark deleted
+    message.deletedForEveryone = true;
+    message.deletedBy = req.user._id;
 
-    res.status(200).json({
-        success: true,
-        message: "Message deleted successfully",
-    });
-})
-
-exports.updateMessage = catchAsyncErrors(async (req, res, next) => {
-    const message = await Message.findById(req.params.id);
-
-    if (!message) {
-        return next(new ErrorHandler("Message not found", 404));
+    if (!isSender && isAdmin) {
+        message.deletedByAdmin = true;
     }
 
-    if (message.sender.toString() !== req.user._id.toString()) {
-        return next(new ErrorHandler("You can only edit your own messages", 403));
-    }
+    // remove payload
+    message.content = null;
+    message.media = null;
+    message.location = null;
+    message.contact = null;
+    message.poll = null;
+    message.payloadStripped = true;
 
-    message.content = req.body.content || message.content;
     await message.save();
 
+    // socket broadcast
+    const io = req.app.get("io");
+
+    if (io) {
+
+        io.to(message.chat._id.toString()).emit(
+            "message:deleted",
+            {
+                messageId,
+                deletedBy: req.user._id,
+                deletedByAdmin: message.deletedByAdmin,
+                chatId: message.chat._id
+            }
+        );
+
+    }
+
     res.status(200).json({
         success: true,
-        message,
+        messageId,
     });
-})
+
+});

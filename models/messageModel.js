@@ -63,7 +63,21 @@ const messageSchema = new mongoose.Schema(
         payloadStripped: {
             type: Boolean,
             default: false,
-        }
+        },
+        deletedForEveryone: {
+            type: Boolean,
+            default: false,
+        },
+
+        deletedBy: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "User",
+        },
+
+        deletedByAdmin: {
+            type: Boolean,
+            default: false,
+        },
     },
     { timestamps: true }
 );

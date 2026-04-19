@@ -42,6 +42,8 @@ const io = new Server(httpServer, {
     },
 });
 
+app.set("io", io);
+
 // 🔥 online users: { userId: Set(socketId) }
 const onlineUsers = {};
 
@@ -175,7 +177,11 @@ io.on("connection", (socket) => {
 
     // track active chat per socket
     socket.on("joinRoom", ({ chatId }) => {
+
         socket.activeChatId = chatId;
+
+        socket.join(chatId); // ⭐ REQUIRED
+
     });
 
     socket.on("leaveRoom", () => {
@@ -344,7 +350,7 @@ io.on("connection", (socket) => {
                 from: callerId,
                 name: callerName,
                 profileImage: callerImage,
-                type 
+                type
             });
         });
 
